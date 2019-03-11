@@ -1,0 +1,9 @@
+[package]
+name = "untitled"
+version = "0.1.0"
+authors = ["idursun"]
+edition = "2018"
+
+[dependencies.nom]
+version ="4.2.2"
+features = ["verbose-errors"]
