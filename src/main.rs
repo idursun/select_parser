@@ -1,15 +1,15 @@
 #[macro_use]
 extern crate nom;
-use nom::{space1, space0, multispace};
+use nom::multispace;
 use nom::types::CompleteByteSlice;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct Statement<'a> {
     columns: Vec<Object<'a>>,
     table: Object<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct Object<'a> {
     schema: Option<&'a str>,
     name: &'a str,
@@ -62,8 +62,66 @@ named!(p_select<CompleteByteSlice, Statement>,
 );
 
 fn main() {
-    match p_select(CompleteByteSlice(b"select a ,  b ,   c from [dbo].[table1]")) {
+    match p_select(CompleteByteSlice(
+        b"select a ,  b ,   c from [dbo].[table1]",
+    )) {
         Ok(result) => println!("{:?}", result),
         Err(e) => eprintln!("{:?}", e),
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_ident() {
+        let result = ident(CompleteByteSlice(b"ident"));
+        assert_eq!(
+            result,
+            Ok((CompleteByteSlice(&b""[..]), CompleteByteSlice(b"ident")))
+        );
+    }
+
+    #[test]
+    fn test_object_name() {
+        let result = p_object(CompleteByteSlice(b"[a].[b]"));
+        assert_eq!(
+            result,
+            Ok((
+                CompleteByteSlice(&b""[..]),
+                Object {
+                    schema: Some("a"),
+                    name: "b"
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_statement() {
+        let result = p_select(CompleteByteSlice(
+            b"select a ,  b ,   c from [dbo].[table1]",
+        ));
+        let expected = Statement {
+            table: Object {
+                schema: Some("dbo"),
+                name: "table1",
+            },
+            columns: vec![
+                Object {
+                    schema: None,
+                    name: "a",
+                },
+                Object {
+                    schema: None,
+                    name: "b",
+                },
+                Object {
+                    schema: None,
+                    name: "c",
+                },
+            ],
+        };
+        assert_eq!(result, Ok((CompleteByteSlice(&b""[..]), expected)));
+    }
 }
