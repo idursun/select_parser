@@ -1,12 +1,18 @@
 #[macro_use]
 extern crate nom;
-use nom::types::{CompleteByteSlice};
-use nom::{space1};
+use nom::{space1, space0, multispace};
+use nom::types::CompleteByteSlice;
 
 #[derive(Debug)]
 struct Statement<'a> {
-    columns: Vec<&'a str>,
-    table: &'a str,
+    columns: Vec<Object<'a>>,
+    table: Object<'a>,
+}
+
+#[derive(Debug)]
+struct Object<'a> {
+    schema: Option<&'a str>,
+    name: &'a str,
 }
 
 fn complete_byte_slice_to_str(s: CompleteByteSlice) -> Result<&str, std::str::Utf8Error> {
@@ -19,41 +25,45 @@ fn is_ident(c: u8) -> bool {
 
 named!(ident<CompleteByteSlice, CompleteByteSlice>, take_while!(is_ident) );
 
-named!(ident_list<CompleteByteSlice, Vec<&str>>,
-    separated_list!(
-        char!(','),
-        map_res!(
-            ws!(ident),
-            complete_byte_slice_to_str
-        )
+named!(delimited_object<CompleteByteSlice, CompleteByteSlice>, 
+        delimited!(
+            char!('['), 
+            take_until!("]"), 
+            char!(']')
+        ) 
+);
+
+named!(p_object<CompleteByteSlice, Object>, 
+    do_parse!(  
+        schema: opt!(
+                    map_res!( 
+                        do_parse!(
+                            s: alt!(delimited_object | ident) >> 
+                            char!('.') >> 
+                            (s)) 
+                        , complete_byte_slice_to_str)) >> 
+        name: map_res!(alt!(delimited_object | ident), complete_byte_slice_to_str) >> 
+        (Object {schema, name})
     )
 );
 
-named!(table_name<CompleteByteSlice, &str>,
-    map_res!(
-        delimited!(
-            char!('['),
-            take_until!("]"),
-            char!(']')
-        ),
-    complete_byte_slice_to_str
-));
+named!(ident_list<CompleteByteSlice, Vec<Object>>, separated_list!( char!(','), ws!(p_object)));
 
 named!(p_select<CompleteByteSlice, Statement>,
     do_parse!(
         tag!("select") >>
-        space1 >>
+        multispace >>
         columns: ident_list >>
         tag!("from") >>
-        space1 >>
-        table: table_name >>
+        multispace >>
+        table: p_object >>
         (Statement { columns, table })
     )
 );
 
 fn main() {
-    match p_select(CompleteByteSlice(b"select a ,  b ,   c from [table1]")) {
+    match p_select(CompleteByteSlice(b"select a ,  b ,   c from [dbo].[table1]")) {
         Ok(result) => println!("{:?}", result),
-        Err(e) => eprintln!("{:?}", e)
+        Err(e) => eprintln!("{:?}", e),
     };
 }
