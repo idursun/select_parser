@@ -14,3 +14,7 @@ combine = "3.8.0"
 [[bin]]
 name = "combine"
 path ="src/main_combine.rs"
+
+[[bin]]
+name = "nom"
+path ="src/main_nom.rs"
