@@ -7,7 +7,7 @@ use combine::{
 
 #[derive(Debug, PartialEq)]
 struct Statement<'a> {
-    columns: Vec<Object<'a>>,
+    columns: ColumnList<'a>,
     table: Object<'a>,
 }
 
@@ -15,6 +15,12 @@ struct Statement<'a> {
 struct Object<'a> {
     schema: Option<&'a str>,
     name: &'a str,
+}
+
+#[derive(Debug, PartialEq)]
+enum ColumnList<'a> {
+    All,
+    List(Vec<Object<'a>>),
 }
 
 fn ident<'a, I>() -> impl Parser<Input = I, Output = &'a str>
@@ -47,12 +53,13 @@ where
         .map(|(_, schema, name, _)| Object { schema, name })
 }
 
-fn column_list<'a, I>() -> impl Parser<Input = I, Output = Vec<Object<'a>>>
+fn column_list<'a, I>() -> impl Parser<Input = I, Output = ColumnList<'a>>
 where
     I: RangeStream<Item = char, Range = &'a str>,
     I::Error: ParseError<I::Item, I::Range, I::Position>,
 {
-    sep_by1(p_object_name(), range(","))
+    attempt(token('*').map(|_| ColumnList::All))
+    .or(sep_by1::<Vec<_>, _, _>( p_object_name(), token(','), ) .map(|list| ColumnList::List(list)))
 }
 
 fn p_select<'a, I>() -> impl Parser<Input = I, Output = Statement<'a>>
@@ -71,19 +78,14 @@ where
         .map(|(_, _, columns, _, _, table)| Statement { columns, table })
 }
 
+fn test(input: &str) {
+    match p_select().easy_parse(State::new(input)) {
+        Ok((output, _remaining)) => println!("{:?}", output),
+        Err(err) => eprintln!("{}", err),
+    };
+}
+
 fn main() {
-    match p_select().easy_parse(State::new("select a,b,c,d from table1")) {
-        Ok((output, _remaining)) => println!("{:?}", output),
-        Err(err) => eprintln!("{}", err),
-    };
-
-    match column_list().easy_parse(State::new("[a].[b] ,  [x].[y]")) {
-        Ok((output, _remaining)) => println!("{:?}", output),
-        Err(err) => eprintln!("{}", err),
-    };
-
-    match p_object_name().easy_parse(State::new("  [a].[b]  ")) {
-        Ok((output, _remaining)) => println!("{:?}", output),
-        Err(err) => eprintln!("{}", err),
-    };
+    test("select * from table1");
+    test("select a,  b,c,d from table1");
 }
